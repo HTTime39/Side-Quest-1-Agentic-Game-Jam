@@ -14,7 +14,16 @@ draw_game :: proc(player: Player, enemies: [MAX_ENEMIES]Enemy, beams: [MAX_BEAMS
 	for y := i32(ARENA_TOP); y <= i32(ARENA_BOTTOM); y += 32 { rl.DrawLine(i32(ARENA_LEFT), y, i32(ARENA_RIGHT), y, rl.Color{18, 27, 43, 255}) }
 	rl.DrawRectangleLines(i32(ARENA_LEFT), i32(ARENA_TOP), i32(ARENA_RIGHT - ARENA_LEFT), i32(ARENA_BOTTOM - ARENA_TOP), rl.Color{50, 91, 122, 255})
 
-	for enemy in enemies { if enemy.health > 0 { rl.DrawCircleV(enemy.position, enemy.radius + 3, rl.Color{95, 25, 54, 255}); rl.DrawCircleV(enemy.position, enemy.radius, rl.Color{238, 77, 91, 255}) } }
+	for enemy in enemies {
+		if enemy.health <= 0 { continue }
+		if enemy.kind == .Blue {
+			rl.DrawRectangle(i32(enemy.position.x - enemy.radius - 3), i32(enemy.position.y - enemy.radius - 3), i32((enemy.radius + 3) * 2), i32((enemy.radius + 3) * 2), rl.Color{15, 54, 96, 255})
+			rl.DrawRectangle(i32(enemy.position.x - enemy.radius), i32(enemy.position.y - enemy.radius), i32(enemy.radius * 2), i32(enemy.radius * 2), rl.Color{50, 157, 255, 255})
+		} else {
+			rl.DrawCircleV(enemy.position, enemy.radius + 3, rl.Color{95, 25, 54, 255})
+			rl.DrawCircleV(enemy.position, enemy.radius, rl.Color{238, 77, 91, 255})
+		}
+	}
 	for beam in beams {
 		if beam.life > 0 {
 			rl.DrawLineEx(beam.origin, beam.position, 9, rl.Color{255, 165, 58, 100})

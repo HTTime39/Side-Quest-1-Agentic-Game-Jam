@@ -1,2 +1,4 @@
 session,date,minutes,tool,model,tokens_in,tokens_out,tokens_source,prompts,features,llm_helpfulness,notes
 1,2026-09-23,25,copilot,GitHub Copilot,unavailable,unavailable,unavailable,2,movement;shooting;enemy spawning;dash;round flow;raylib validation,5,"Built and validated a playable Odin/Raylib survival shooter. Best moment: the game launched cleanly; worst moment: fixing Odin string and pointer API issues."
+2,2026-09-27,60,copilot,GitHub Copilot,unavailable,unavailable,unavailable,9,"IJKL firing;beam projectiles;three-enemy piercing;player-following beam;collision response",5,"Best: beam changes compiled cleanly; worst: reconnecting the Git metadata."
+3,2026-09-27,20,copilot,GitHub Copilot,unavailable,unavailable,unavailable,3,"blue square enemy;axis-aligned chase",5,"Best: new enemy added and worked cleanly; worst: nothing"

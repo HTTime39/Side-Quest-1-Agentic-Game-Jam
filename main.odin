@@ -23,11 +23,17 @@ Player :: struct {
 	aim_direction: rl.Vector2,
 }
 
+Enemy_Type :: enum {
+	Red,
+	Blue,
+}
+
 Enemy :: struct {
 	position: rl.Vector2,
 	speed: f32,
 	health: f32,
 	radius: f32,
+	kind: Enemy_Type,
 }
 
 Beam :: struct {

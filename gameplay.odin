@@ -156,7 +156,15 @@ spawn_enemy :: proc(enemies: ^[MAX_ENEMIES]Enemy, elapsed: f32) {
 		case 2: x = f32(rl.GetRandomValue(i32(ARENA_LEFT), i32(ARENA_RIGHT))); y = ARENA_TOP - 24
 		case 3: x = f32(rl.GetRandomValue(i32(ARENA_LEFT), i32(ARENA_RIGHT))); y = ARENA_BOTTOM + 24
 		}
-		enemy = Enemy{position = rl.Vector2{x, y}, speed = 54 + elapsed * 1.2 + f32(rl.GetRandomValue(0, 22)), health = 1, radius = 12}
+		enemy_type := Enemy_Type.Red
+		if rl.GetRandomValue(0, 3) == 0 {
+			enemy_type = .Blue
+		}
+		speed := 54 + elapsed * 1.2 + f32(rl.GetRandomValue(0, 22))
+		if enemy_type == .Blue {
+			speed *= 2.0
+		}
+		enemy = Enemy{position = rl.Vector2{x, y}, speed = speed, health = 1, radius = 12, kind = enemy_type}
 		break
 	}
 }
@@ -168,8 +176,16 @@ update_enemies :: proc(enemies: ^[MAX_ENEMIES]Enemy, player: ^Player, score: ^in
 		dy := player.position.y - enemy.position.y
 		length := math.sqrt(dx * dx + dy * dy)
 		if length > 0 {
-			enemy.position.x += dx / length * enemy.speed * dt
-			enemy.position.y += dy / length * enemy.speed * dt
+			if enemy.kind == .Blue {
+				if math.abs(dx) > math.abs(dy) {
+					if dx > 0 { enemy.position.x += enemy.speed * dt } else { enemy.position.x -= enemy.speed * dt }
+				} else {
+					if dy > 0 { enemy.position.y += enemy.speed * dt } else { enemy.position.y -= enemy.speed * dt }
+				}
+			} else {
+				enemy.position.x += dx / length * enemy.speed * dt
+				enemy.position.y += dy / length * enemy.speed * dt
+			}
 		}
 		if length < enemy.radius + 16 && player.invulnerable <= 0 {
 			player.health -= 12
