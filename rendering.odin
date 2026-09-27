@@ -5,7 +5,7 @@ import "core:math"
 import "core:strings"
 import rl "vendor:raylib"
 
-draw_game :: proc(player: Player, enemies: [MAX_ENEMIES]Enemy, bullets: [MAX_BULLETS]Bullet, elapsed: f32, score: int, game_over, win: bool) {
+draw_game :: proc(player: Player, enemies: [MAX_ENEMIES]Enemy, beams: [MAX_BEAMS]Beam, elapsed: f32, score: int, game_over, win: bool) {
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.Color{9, 13, 24, 255})
 
@@ -14,8 +14,13 @@ draw_game :: proc(player: Player, enemies: [MAX_ENEMIES]Enemy, bullets: [MAX_BUL
 	for y := i32(ARENA_TOP); y <= i32(ARENA_BOTTOM); y += 32 { rl.DrawLine(i32(ARENA_LEFT), y, i32(ARENA_RIGHT), y, rl.Color{18, 27, 43, 255}) }
 	rl.DrawRectangleLines(i32(ARENA_LEFT), i32(ARENA_TOP), i32(ARENA_RIGHT - ARENA_LEFT), i32(ARENA_BOTTOM - ARENA_TOP), rl.Color{50, 91, 122, 255})
 
-	for bullet in bullets { if bullet.life > 0 { rl.DrawCircleV(bullet.position, 4, rl.Color{255, 219, 102, 255}) } }
 	for enemy in enemies { if enemy.health > 0 { rl.DrawCircleV(enemy.position, enemy.radius + 3, rl.Color{95, 25, 54, 255}); rl.DrawCircleV(enemy.position, enemy.radius, rl.Color{238, 77, 91, 255}) } }
+	for beam in beams {
+		if beam.life > 0 {
+			rl.DrawLineEx(beam.origin, beam.position, 9, rl.Color{255, 165, 58, 100})
+			rl.DrawLineEx(beam.origin, beam.position, 4, rl.Color{255, 235, 145, 255})
+		}
+	}
 
 	player_color := rl.Color{72, 211, 176, 255}
 	if player.invulnerable > 0 && i32(player.invulnerable * 14) % 2 == 0 { player_color = rl.Color{255, 255, 255, 255} }

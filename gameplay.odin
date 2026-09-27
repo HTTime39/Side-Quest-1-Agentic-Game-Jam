@@ -3,7 +3,7 @@ package main
 import "core:math"
 import rl "vendor:raylib"
 
-reset_game :: proc(player: ^Player, enemies: ^[MAX_ENEMIES]Enemy, bullets: ^[MAX_BULLETS]Bullet) {
+reset_game :: proc(player: ^Player, enemies: ^[MAX_ENEMIES]Enemy, beams: ^[MAX_BEAMS]Beam) {
 	player^ = Player{
 		position = rl.Vector2{SCREEN_W / 2, SCREEN_H / 2},
 		health = 100,
@@ -12,12 +12,12 @@ reset_game :: proc(player: ^Player, enemies: ^[MAX_ENEMIES]Enemy, bullets: ^[MAX
 	for &enemy in enemies {
 		enemy = Enemy{}
 	}
-	for &bullet in bullets {
-		bullet = Bullet{}
+	for &beam in beams {
+		beam = Beam{}
 	}
 }
 
-update_player :: proc(player: ^Player, bullets: ^[MAX_BULLETS]Bullet, dt: f32) {
+update_player :: proc(player: ^Player, beams: ^[MAX_BEAMS]Beam, dt: f32) {
 	direction := rl.Vector2{}
 	if rl.IsKeyDown(rl.KeyboardKey.W) || rl.IsKeyDown(rl.KeyboardKey.UP) { direction.y -= 1 }
 	if rl.IsKeyDown(rl.KeyboardKey.S) || rl.IsKeyDown(rl.KeyboardKey.DOWN) { direction.y += 1 }
@@ -52,46 +52,94 @@ update_player :: proc(player: ^Player, bullets: ^[MAX_BULLETS]Bullet, dt: f32) {
 	if rl.IsKeyDown(rl.KeyboardKey.J) { shoot_direction.x -= 1 }
 	if rl.IsKeyDown(rl.KeyboardKey.L) { shoot_direction.x += 1 }
 	shoot_length := math.sqrt(shoot_direction.x * shoot_direction.x + shoot_direction.y * shoot_direction.y)
-
-	player.cooldown = math.max(0, player.cooldown - dt)
-	if shoot_length > 0 && player.cooldown <= 0 {
+	if shoot_length > 0 {
 		shoot_direction.x /= shoot_length
 		shoot_direction.y /= shoot_length
 		player.aim_direction = shoot_direction
-		spawn_bullet(bullets, player.position, rl.Vector2{shoot_direction.x * 680, shoot_direction.y * 680})
-		player.cooldown = 0.13
+	}
+
+	player.cooldown = math.max(0, player.cooldown - dt)
+	if shoot_length > 0 && player.cooldown <= 0 {
+		spawn_beam(beams, player.position, rl.Vector2{shoot_direction.x * BEAM_SPEED, shoot_direction.y * BEAM_SPEED})
+		player.cooldown = 0.5
 	}
 }
 
-spawn_bullet :: proc(bullets: ^[MAX_BULLETS]Bullet, position, velocity: rl.Vector2) {
-	for &bullet in bullets {
-		if bullet.life <= 0 {
-			bullet = Bullet{position = position, velocity = velocity, life = 1.3}
+spawn_beam :: proc(beams: ^[MAX_BEAMS]Beam, position, velocity: rl.Vector2) {
+	for &beam in beams {
+		if beam.life <= 0 {
+			beam = Beam{origin = position, position = position, velocity = velocity, life = 3}
 			break
 		}
 	}
 }
 
-update_bullets :: proc(bullets: ^[MAX_BULLETS]Bullet, enemies: ^[MAX_ENEMIES]Enemy, score: ^int, dt: f32) {
-	for &bullet in bullets {
-		if bullet.life <= 0 { continue }
-		bullet.position.x += bullet.velocity.x * dt
-		bullet.position.y += bullet.velocity.y * dt
-		bullet.life -= dt
-		if bullet.position.x < ARENA_LEFT || bullet.position.x > ARENA_RIGHT || bullet.position.y < ARENA_TOP || bullet.position.y > ARENA_BOTTOM {
-			bullet.life = 0
-			continue
+update_beams :: proc(beams: ^[MAX_BEAMS]Beam, enemies: ^[MAX_ENEMIES]Enemy, player: ^Player, score: ^int, dt: f32) {
+	for &beam in beams {
+		if beam.life <= 0 { continue }
+
+		tip_start := beam.position
+		player_delta_x := player.position.x - beam.origin.x
+		player_delta_y := player.position.y - beam.origin.y
+		step_x := beam.velocity.x * dt + player_delta_x
+		step_y := beam.velocity.y * dt + player_delta_y
+		travel_fraction: f32 = 1
+		reached_edge := false
+
+		if step_x > 0 && tip_start.x + step_x >= SCREEN_W {
+			travel_fraction = math.min(travel_fraction, (f32(SCREEN_W) - tip_start.x) / step_x)
+			reached_edge = true
+		} else if step_x < 0 && tip_start.x + step_x <= 0 {
+			travel_fraction = math.min(travel_fraction, -tip_start.x / step_x)
+			reached_edge = true
 		}
-		for &enemy in enemies {
-			if enemy.health <= 0 { continue }
-			dx := bullet.position.x - enemy.position.x
-			dy := bullet.position.y - enemy.position.y
-			if dx * dx + dy * dy < (enemy.radius + 5) * (enemy.radius + 5) {
-				enemy.health = 0
-				bullet.life = 0
+		if step_y > 0 && tip_start.y + step_y >= SCREEN_H {
+			travel_fraction = math.min(travel_fraction, (f32(SCREEN_H) - tip_start.y) / step_y)
+			reached_edge = true
+		} else if step_y < 0 && tip_start.y + step_y <= 0 {
+			travel_fraction = math.min(travel_fraction, -tip_start.y / step_y)
+			reached_edge = true
+		}
+
+		step_x *= travel_fraction
+		step_y *= travel_fraction
+		beam.position.x += step_x
+		beam.position.y += step_y
+		beam.origin = player.position
+		beam.life -= dt
+
+		segment_start := beam.origin
+		segment_x := beam.position.x - segment_start.x
+		segment_y := beam.position.y - segment_start.y
+		segment_length_sq := segment_x * segment_x + segment_y * segment_y
+		if segment_length_sq > 0 {
+			for beam.hits < 3 {
+				closest_enemy: ^Enemy = nil
+				closest_projection: f32 = 2
+				for &enemy in enemies {
+					if enemy.health <= 0 { continue }
+					dx := enemy.position.x - segment_start.x
+					dy := enemy.position.y - segment_start.y
+					projection := (dx * segment_x + dy * segment_y) / segment_length_sq
+					projection = math.clamp(projection, 0, 1)
+					closest_x := segment_start.x + segment_x * projection
+					closest_y := segment_start.y + segment_y * projection
+					distance_x := enemy.position.x - closest_x
+					distance_y := enemy.position.y - closest_y
+					if distance_x * distance_x + distance_y * distance_y < (enemy.radius + 5) * (enemy.radius + 5) && projection < closest_projection {
+						closest_enemy = &enemy
+						closest_projection = projection
+					}
+				}
+				if closest_enemy == nil { break }
+				closest_enemy^.health = 0
+				beam.hits += 1
 				score^ += 10
-				break
 			}
+		}
+
+		if reached_edge || beam.life <= 0 || beam.hits >= 3 {
+			beam.life = 0
 		}
 	}
 }

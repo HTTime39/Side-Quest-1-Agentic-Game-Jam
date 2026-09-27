@@ -10,7 +10,8 @@ ARENA_TOP :: 82.0
 ARENA_RIGHT :: 1068.0
 ARENA_BOTTOM :: 668.0
 MAX_ENEMIES :: 256
-MAX_BULLETS :: 256
+MAX_BEAMS :: 256
+BEAM_SPEED :: 1200
 
 Player :: struct {
 	position: rl.Vector2,
@@ -29,10 +30,12 @@ Enemy :: struct {
 	radius: f32,
 }
 
-Bullet :: struct {
+Beam :: struct {
+	origin: rl.Vector2,
 	position: rl.Vector2,
 	velocity: rl.Vector2,
 	life: f32,
+	hits: int,
 }
 
 main :: proc() {
@@ -42,8 +45,8 @@ main :: proc() {
 
 	player: Player
 	enemies: [MAX_ENEMIES]Enemy
-	bullets: [MAX_BULLETS]Bullet
-	reset_game(&player, &enemies, &bullets)
+	beams: [MAX_BEAMS]Beam
+	reset_game(&player, &enemies, &beams)
 
 	game_over := false
 	win := false
@@ -56,7 +59,7 @@ main :: proc() {
 
 		if game_over || win {
 			if rl.IsKeyPressed(rl.KeyboardKey.ENTER) || rl.IsKeyPressed(rl.KeyboardKey.SPACE) {
-				reset_game(&player, &enemies, &bullets)
+				reset_game(&player, &enemies, &beams)
 				game_over = false
 				win = false
 				time_alive = 0
@@ -65,7 +68,7 @@ main :: proc() {
 			}
 		} else {
 			time_alive += dt
-			update_player(&player, &bullets, dt)
+			update_player(&player, &beams, dt)
 
 			spawn_timer -= dt
 			spawn_delay := math.max(0.18, 0.85 - time_alive * 0.008)
@@ -74,7 +77,7 @@ main :: proc() {
 				spawn_timer = spawn_delay
 			}
 
-			update_bullets(&bullets, &enemies, &score, dt)
+			update_beams(&beams, &enemies, &player, &score, dt)
 			update_enemies(&enemies, &player, &score, dt)
 
 			if player.health <= 0 {
@@ -84,6 +87,6 @@ main :: proc() {
 			}
 		}
 
-		draw_game(player, enemies, bullets, time_alive, score, game_over, win)
+		draw_game(player, enemies, beams, time_alive, score, game_over, win)
 	}
 }
