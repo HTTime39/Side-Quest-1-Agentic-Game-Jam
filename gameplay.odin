@@ -164,9 +164,9 @@ spawn_enemy :: proc(enemies: ^[MAX_ENEMIES]Enemy, elapsed: f32, spawn_count: ^in
 		}
 		speed := 54 + elapsed * 1.2 + f32(rl.GetRandomValue(0, 22))
 		if enemy_type == .Blue {
-			speed *= 2.0
+			speed *= 1.7
 		} else if enemy_type == .Triangle {
-			speed *= 2.2
+			speed *= 1.9
 		}
 		enemy = Enemy{position = rl.Vector2{x, y}, speed = speed, health = 1, radius = 12, kind = enemy_type}
 		spawn_count^ += 1
@@ -177,22 +177,39 @@ spawn_enemy :: proc(enemies: ^[MAX_ENEMIES]Enemy, elapsed: f32, spawn_count: ^in
 update_enemies :: proc(enemies: ^[MAX_ENEMIES]Enemy, player: ^Player, score: ^int, dt: f32) {
 	for &enemy in enemies {
 		if enemy.health <= 0 { continue }
+		enemy.flash_timer = math.max(0, enemy.flash_timer - dt)
 		dx := player.position.x - enemy.position.x
 		dy := player.position.y - enemy.position.y
 		length := math.sqrt(dx * dx + dy * dy)
 		if length > 0 {
 			if enemy.kind == .Blue {
-				if math.abs(dx) > math.abs(dy) {
-					if dx > 0 { enemy.position.x += enemy.speed * dt } else { enemy.position.x -= enemy.speed * dt }
+				if enemy.direction_lock <= 0 {
+					direction := rl.Vector2{}
+					axis := Enemy_Axis.Vertical
+					if math.abs(dx) > math.abs(dy) {
+						axis = .Horizontal
+						if dx > 0 { direction.x = 1 } else { direction.x = -1 }
+					} else {
+						if dy > 0 { direction.y = 1 } else { direction.y = -1 }
+					}
+					if enemy.movement_axis != .None && enemy.movement_axis != axis { enemy.flash_timer = 0.16 }
+					enemy.movement_axis = axis
+					enemy.direction = direction
+					enemy.direction_lock = 0.3
 				} else {
-					if dy > 0 { enemy.position.y += enemy.speed * dt } else { enemy.position.y -= enemy.speed * dt }
+					enemy.direction_lock = math.max(0, enemy.direction_lock - dt)
 				}
+				enemy.position.x += enemy.direction.x * enemy.speed * dt
+				enemy.position.y += enemy.direction.y * enemy.speed * dt
 			} else if enemy.kind == .Triangle {
 				if enemy.direction_lock <= 0 {
 					diagonal_x: f32 = 1
 					diagonal_y: f32 = 1
 					if dx < 0 { diagonal_x = -1 }
 					if dy < 0 { diagonal_y = -1 }
+					if enemy.direction.x != 0 && (enemy.direction.x != diagonal_x || enemy.direction.y != diagonal_y) {
+						enemy.flash_timer = 0.16
+					}
 					enemy.direction = rl.Vector2{diagonal_x, diagonal_y}
 					enemy.direction_lock = 0.5
 				} else {

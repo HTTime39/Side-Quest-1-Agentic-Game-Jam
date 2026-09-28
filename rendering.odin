@@ -95,6 +95,16 @@ draw_game :: proc(player: Player, enemies: [MAX_ENEMIES]Enemy, beams: [MAX_BEAMS
 	rl.BeginShaderMode(lighting_shader)
 	rl.DrawTextureRec(lighting_target.texture, rl.Rectangle{0, 0, f32(SCREEN_W), -f32(SCREEN_H)}, rl.Vector2{}, rl.Color{255, 255, 255, 255})
 	rl.EndShaderMode()
+	rl.BeginBlendMode(rl.BlendMode.ADDITIVE)
+	for enemy in enemies {
+		if enemy.health <= 0 || enemy.flash_timer <= 0 { continue }
+		if enemy.kind == .Blue {
+			rl.DrawCircleGradient(enemy.position, 20, rl.Color{50, 157, 255, 210}, rl.Color{50, 157, 255, 0})
+		} else if enemy.kind == .Triangle {
+			rl.DrawCircleGradient(enemy.position, 20, rl.Color{255, 219, 102, 210}, rl.Color{255, 219, 102, 0})
+		}
+	}
+	rl.EndBlendMode()
 
 	text := fmt.tprintf("EDGE//BREAK     SCORE %05d     TIME %05.1f / 90.0", score, elapsed)
 	score_text, _ := strings.clone_to_cstring(text)

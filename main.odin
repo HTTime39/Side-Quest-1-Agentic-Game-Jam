@@ -29,6 +29,12 @@ Enemy_Type :: enum {
 	Triangle,
 }
 
+Enemy_Axis :: enum {
+	None,
+	Horizontal,
+	Vertical,
+}
+
 Enemy :: struct {
 	position: rl.Vector2,
 	speed: f32,
@@ -37,6 +43,8 @@ Enemy :: struct {
 	kind: Enemy_Type,
 	direction: rl.Vector2,
 	direction_lock: f32,
+	movement_axis: Enemy_Axis,
+	flash_timer: f32,
 }
 
 Beam :: struct {
