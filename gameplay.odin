@@ -144,7 +144,7 @@ update_beams :: proc(beams: ^[MAX_BEAMS]Beam, enemies: ^[MAX_ENEMIES]Enemy, play
 	}
 }
 
-spawn_enemy :: proc(enemies: ^[MAX_ENEMIES]Enemy, elapsed: f32) {
+spawn_enemy :: proc(enemies: ^[MAX_ENEMIES]Enemy, elapsed: f32, spawn_count: ^int) {
 	for &enemy in enemies {
 		if enemy.health > 0 { continue }
 		spawn_side := rl.GetRandomValue(0, 3)
@@ -157,14 +157,19 @@ spawn_enemy :: proc(enemies: ^[MAX_ENEMIES]Enemy, elapsed: f32) {
 		case 3: x = f32(rl.GetRandomValue(i32(ARENA_LEFT), i32(ARENA_RIGHT))); y = ARENA_BOTTOM + 24
 		}
 		enemy_type := Enemy_Type.Red
-		if rl.GetRandomValue(0, 3) == 0 {
+		if spawn_count^ % 4 == 0 {
+			enemy_type = .Triangle
+		} else if rl.GetRandomValue(0, 2) == 0 {
 			enemy_type = .Blue
 		}
 		speed := 54 + elapsed * 1.2 + f32(rl.GetRandomValue(0, 22))
 		if enemy_type == .Blue {
 			speed *= 2.0
+		} else if enemy_type == .Triangle {
+			speed *= 2.2
 		}
 		enemy = Enemy{position = rl.Vector2{x, y}, speed = speed, health = 1, radius = 12, kind = enemy_type}
+		spawn_count^ += 1
 		break
 	}
 }
@@ -182,6 +187,20 @@ update_enemies :: proc(enemies: ^[MAX_ENEMIES]Enemy, player: ^Player, score: ^in
 				} else {
 					if dy > 0 { enemy.position.y += enemy.speed * dt } else { enemy.position.y -= enemy.speed * dt }
 				}
+			} else if enemy.kind == .Triangle {
+				if enemy.direction_lock <= 0 {
+					diagonal_x: f32 = 1
+					diagonal_y: f32 = 1
+					if dx < 0 { diagonal_x = -1 }
+					if dy < 0 { diagonal_y = -1 }
+					enemy.direction = rl.Vector2{diagonal_x, diagonal_y}
+					enemy.direction_lock = 0.5
+				} else {
+					enemy.direction_lock = math.max(0, enemy.direction_lock - dt)
+				}
+				diagonal_scale := enemy.speed * dt * 0.70710678
+				enemy.position.x += enemy.direction.x * diagonal_scale
+				enemy.position.y += enemy.direction.y * diagonal_scale
 			} else {
 				enemy.position.x += dx / length * enemy.speed * dt
 				enemy.position.y += dy / length * enemy.speed * dt

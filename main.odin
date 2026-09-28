@@ -26,6 +26,7 @@ Player :: struct {
 Enemy_Type :: enum {
 	Red,
 	Blue,
+	Triangle,
 }
 
 Enemy :: struct {
@@ -34,6 +35,8 @@ Enemy :: struct {
 	health: f32,
 	radius: f32,
 	kind: Enemy_Type,
+	direction: rl.Vector2,
+	direction_lock: f32,
 }
 
 Beam :: struct {
@@ -48,6 +51,14 @@ main :: proc() {
 	rl.InitWindow(SCREEN_W, SCREEN_H, "EDGE//BREAK - Survival Protocol")
 	rl.SetTargetFPS(60)
 	defer rl.CloseWindow()
+	lighting_target := rl.LoadRenderTexture(SCREEN_W, SCREEN_H)
+	defer rl.UnloadRenderTexture(lighting_target)
+	lighting_shader := rl.LoadShaderFromMemory(nil, LIGHTING_FRAGMENT_SHADER)
+	defer rl.UnloadShader(lighting_shader)
+	player_light_location := rl.GetShaderLocation(lighting_shader, "playerPosition")
+	screen_size_location := rl.GetShaderLocation(lighting_shader, "screenSize")
+	beam_segments_location := rl.GetShaderLocation(lighting_shader, "beamSegments[0]")
+	beam_count_location := rl.GetShaderLocation(lighting_shader, "beamCount")
 
 	player: Player
 	enemies: [MAX_ENEMIES]Enemy
@@ -59,6 +70,7 @@ main :: proc() {
 	time_alive: f32 = 0
 	score := 0
 	spawn_timer: f32 = 0
+	spawn_count: int = 0
 
 	for !rl.WindowShouldClose() {
 		dt := math.min(rl.GetFrameTime(), 0.05)
@@ -71,6 +83,7 @@ main :: proc() {
 				time_alive = 0
 				score = 0
 				spawn_timer = 0
+				spawn_count = 0
 			}
 		} else {
 			time_alive += dt
@@ -79,7 +92,7 @@ main :: proc() {
 			spawn_timer -= dt
 			spawn_delay := math.max(0.18, 0.85 - time_alive * 0.008)
 			if spawn_timer <= 0 {
-				spawn_enemy(&enemies, time_alive)
+				spawn_enemy(&enemies, time_alive, &spawn_count)
 				spawn_timer = spawn_delay
 			}
 
@@ -93,6 +106,6 @@ main :: proc() {
 			}
 		}
 
-		draw_game(player, enemies, beams, time_alive, score, game_over, win)
+		draw_game(player, enemies, beams, time_alive, score, game_over, win, lighting_target, lighting_shader, player_light_location, screen_size_location, beam_segments_location, beam_count_location)
 	}
 }
