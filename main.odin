@@ -59,6 +59,8 @@ main :: proc() {
 	rl.InitWindow(SCREEN_W, SCREEN_H, "EDGE//BREAK - Survival Protocol")
 	rl.SetTargetFPS(60)
 	defer rl.CloseWindow()
+	background_texture := rl.LoadTexture("assets/background.png")
+	defer rl.UnloadTexture(background_texture)
 	lighting_target := rl.LoadRenderTexture(SCREEN_W, SCREEN_H)
 	defer rl.UnloadRenderTexture(lighting_target)
 	lighting_shader := rl.LoadShaderFromMemory(nil, LIGHTING_FRAGMENT_SHADER)
@@ -73,6 +75,7 @@ main :: proc() {
 	beams: [MAX_BEAMS]Beam
 	reset_game(&player, &enemies, &beams)
 
+	title_screen := true
 	game_over := false
 	win := false
 	time_alive: f32 = 0
@@ -83,9 +86,14 @@ main :: proc() {
 	for !rl.WindowShouldClose() {
 		dt := math.min(rl.GetFrameTime(), 0.05)
 
-		if game_over || win {
+		if title_screen {
+			if rl.GetKeyPressed() != .KEY_NULL {
+				title_screen = false
+			}
+		} else if game_over || win {
 			if rl.IsKeyPressed(rl.KeyboardKey.ENTER) || rl.IsKeyPressed(rl.KeyboardKey.SPACE) {
 				reset_game(&player, &enemies, &beams)
+				title_screen = true
 				game_over = false
 				win = false
 				time_alive = 0
@@ -114,6 +122,6 @@ main :: proc() {
 			}
 		}
 
-		draw_game(player, enemies, beams, time_alive, score, game_over, win, lighting_target, lighting_shader, player_light_location, screen_size_location, beam_segments_location, beam_count_location)
+		draw_game(player, enemies, beams, time_alive, score, title_screen, game_over, win, background_texture, lighting_target, lighting_shader, player_light_location, screen_size_location, beam_segments_location, beam_count_location)
 	}
 }
