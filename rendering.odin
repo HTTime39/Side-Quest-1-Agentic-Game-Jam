@@ -12,6 +12,7 @@ in vec2 fragTexCoord;
 in vec4 fragColor;
 uniform sampler2D texture0;
 uniform vec2 playerPosition;
+uniform float playerLightRadius;
 uniform vec2 screenSize;
 uniform vec4 beamSegments[8];
 uniform int beamCount;
@@ -20,7 +21,7 @@ out vec4 finalColor;
 void main() {
 	vec2 pixelPosition = vec2(gl_FragCoord.x, screenSize.y - gl_FragCoord.y);
 	float distanceFromPlayer = distance(pixelPosition, playerPosition);
-	float light = 1.0 - smoothstep(70.0, 165.0, distanceFromPlayer);
+	float light = 1.0 - smoothstep(playerLightRadius * 0.42, playerLightRadius, distanceFromPlayer);
 	for (int i = 0; i < 8; i++) {
 		if (i >= beamCount) break;
 		vec4 segment = beamSegments[i];
@@ -49,7 +50,7 @@ squid_point :: proc(center, right, forward: rl.Vector2, radius, local_x, local_y
 	}
 }
 
-draw_game :: proc(player: Player, enemies: [MAX_ENEMIES]Enemy, beams: [MAX_BEAMS]Beam, elapsed: f32, score: int, title_screen, game_over, win: bool, background_texture: rl.Texture2D, lighting_target: rl.RenderTexture2D, lighting_shader: rl.Shader, player_light_location, screen_size_location, beam_segments_location, beam_count_location: i32) {
+draw_game :: proc(player: Player, enemies: [MAX_ENEMIES]Enemy, beams: [MAX_BEAMS]Beam, elapsed: f32, score, stage, stage_enemy_target, stage_spawned: int, upgrade_pending: bool, upgrade_choices: [2]Upgrade_Type, upgrade_selection: int, title_screen, game_over, win: bool, background_texture: rl.Texture2D, lighting_target: rl.RenderTexture2D, lighting_shader: rl.Shader, player_light_location, player_light_radius_location, screen_size_location, beam_segments_location, beam_count_location: i32) {
 	rl.BeginTextureMode(lighting_target)
 	rl.ClearBackground(rl.Color{9, 13, 24, 255})
 	rl.DrawTexturePro(background_texture, rl.Rectangle{0, 0, f32(background_texture.width), f32(background_texture.height)}, rl.Rectangle{0, 0, SCREEN_W, SCREEN_H}, rl.Vector2{}, 0, rl.Color{255, 255, 255, 255})
@@ -203,7 +204,9 @@ draw_game :: proc(player: Player, enemies: [MAX_ENEMIES]Enemy, beams: [MAX_BEAMS
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.Color{9, 13, 24, 255})
 	player_position := player.position
+	player_light_radius := player.light_radius
 	rl.SetShaderValue(lighting_shader, player_light_location, rawptr(&player_position), .VEC2)
+	rl.SetShaderValue(lighting_shader, player_light_radius_location, rawptr(&player_light_radius), .FLOAT)
 	screen_size := rl.Vector2{f32(SCREEN_W), f32(SCREEN_H)}
 	rl.SetShaderValue(lighting_shader, screen_size_location, rawptr(&screen_size), .VEC2)
 	beam_segments: [MAX_LIT_BEAMS]rl.Vector4
@@ -230,9 +233,15 @@ draw_game :: proc(player: Player, enemies: [MAX_ENEMIES]Enemy, beams: [MAX_BEAMS
 	}
 	rl.EndBlendMode()
 
-	text := fmt.tprintf("EDGE//BREAK     SCORE %05d     TIME %05.1f / 90.0", score, elapsed)
+	remaining_enemies := stage_enemy_target - stage_spawned
+	for enemy in enemies {
+		if enemy.health > 0 { remaining_enemies += 1 }
+	}
+	text := fmt.tprintf("EDGE//BREAK     SCORE %05d     ELAPSED %05.1f", score, elapsed)
 	score_text, _ := strings.clone_to_cstring(text)
 	rl.DrawText(score_text, 32, 26, 24, rl.Color{220, 235, 238, 255})
+	stage_text, _ := strings.clone_to_cstring(fmt.tprintf("STAGE %d/5     HOSTILES %03d", stage, remaining_enemies))
+	rl.DrawText(stage_text, 32, 51, 18, rl.Color{255, 219, 102, 255})
 	rl.DrawRectangle(820, 29, 220, 16, rl.Color{35, 42, 54, 255})
 	rl.DrawRectangle(820, 29, i32(math.max(0, player.health) * 2.2), 16, rl.Color{72, 211, 176, 255})
 	hp_text, _ := strings.clone_to_cstring(fmt.tprintf("HP %03d", i32(math.max(0, player.health))))
@@ -242,13 +251,35 @@ draw_game :: proc(player: Player, enemies: [MAX_ENEMIES]Enemy, beams: [MAX_BEAMS
 	if game_over || win {
 		rl.DrawRectangle(0, 0, SCREEN_W, SCREEN_H, rl.Color{4, 7, 15, 190})
 		if win {
-			rl.DrawText("90 SECONDS. PROTOCOL COMPLETE.", 250, 270, 32, rl.Color{72, 211, 176, 255})
+			rl.DrawText("ALL FIVE STAGES CLEARED.", SCREEN_W / 2 - rl.MeasureText("ALL FIVE STAGES CLEARED.", 32) / 2, 270, 32, rl.Color{72, 211, 176, 255})
 		} else {
 			rl.DrawText("SIGNAL LOST", 415, 270, 42, rl.Color{238, 77, 91, 255})
 		}
 		final_score_text, _ := strings.clone_to_cstring(fmt.tprintf("FINAL SCORE  %05d", score))
 		rl.DrawText(final_score_text, 430, 335, 25, rl.Color{230, 235, 235, 255})
 		rl.DrawText("PRESS ENTER OR SPACE TO RESTART", 350, 395, 20, rl.Color{255, 219, 102, 255})
+	}
+	if upgrade_pending {
+		rl.DrawRectangle(0, 0, SCREEN_W, SCREEN_H, rl.Color{4, 7, 15, 225})
+		rl.DrawText("STAGE CLEARED", SCREEN_W / 2 - rl.MeasureText("STAGE CLEARED", 42) / 2, 150, 42, rl.Color{72, 211, 176, 255})
+		rl.DrawText("SELECT AN UPGRADE", SCREEN_W / 2 - rl.MeasureText("SELECT AN UPGRADE", 24) / 2, 220, 24, rl.Color{220, 235, 238, 255})
+		for option_index in 0 ..< 2 {
+			option_box := rl.Rectangle{170 + f32(option_index) * 390, 300, 370, 170}
+			box_color := rl.Color{20, 34, 47, 255}
+			border_color := rl.Color{50, 91, 122, 255}
+			if option_index == upgrade_selection {
+				box_color = rl.Color{30, 55, 65, 255}
+				border_color = rl.Color{72, 211, 176, 255}
+			}
+			rl.DrawRectangleRec(option_box, box_color)
+			rl.DrawRectangleLinesEx(option_box, 3, border_color)
+			name, _ := strings.clone_to_cstring(upgrade_name(upgrade_choices[option_index], player))
+			rl.DrawText(name, i32(option_box.x + 22), i32(option_box.y + 58), 23, rl.Color{255, 219, 102, 255})
+			if option_index == upgrade_selection {
+				rl.DrawText("CURRENT SELECTION", i32(option_box.x + 22), i32(option_box.y + 112), 18, rl.Color{150, 180, 190, 255})
+			}
+		}
+		rl.DrawText("LEFT / RIGHT TO SELECT     ENTER TO APPLY", SCREEN_W / 2 - rl.MeasureText("LEFT / RIGHT TO SELECT     ENTER TO APPLY", 18) / 2, 520, 18, rl.Color{150, 180, 190, 255})
 	}
 	if title_screen {
 		rl.DrawRectangle(0, 0, SCREEN_W, SCREEN_H, rl.Color{4, 7, 15, 240})
@@ -260,4 +291,25 @@ draw_game :: proc(player: Player, enemies: [MAX_ENEMIES]Enemy, beams: [MAX_BEAMS
 		rl.DrawText("PRESS ANY KEY TO BEGIN", 375, 585, 24, rl.Color{255, 219, 102, 255})
 	}
 	rl.EndDrawing()
+}
+
+upgrade_name :: proc(upgrade: Upgrade_Type, player: Player) -> string {
+	switch upgrade {
+	case .Restore_Health:
+		return "RESTORE 50% HEALTH"
+	case .Front_Spread:
+		return "ADD FRONT SPREAD LASERS"
+	case .Rear_Laser:
+		switch player.rear_laser_level {
+		case 0: return "ADD REAR LASER"
+		case 1: return "ADD LEFT-SIDE LASER"
+		case 2: return "ADD RIGHT-SIDE LASER"
+		case: return "ADD REAR SPREAD LASERS"
+		}
+	case .Extra_Piercing:
+		return "LASER +1 ENEMY PIERCE"
+	case .Larger_Light:
+		return "INCREASE LIGHT RADIUS"
+	}
+	return "UNKNOWN UPGRADE"
 }

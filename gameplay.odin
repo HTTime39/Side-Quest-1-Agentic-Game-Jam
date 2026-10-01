@@ -8,6 +8,7 @@ reset_game :: proc(player: ^Player, enemies: ^[MAX_ENEMIES]Enemy, beams: ^[MAX_B
 		position = rl.Vector2{SCREEN_W / 2, SCREEN_H / 2},
 		health = 100,
 		aim_direction = rl.Vector2{1, 0},
+		light_radius = 165,
 	}
 	for &enemy in enemies {
 		enemy = Enemy{}
@@ -60,15 +61,67 @@ update_player :: proc(player: ^Player, beams: ^[MAX_BEAMS]Beam, dt: f32) {
 
 	player.cooldown = math.max(0, player.cooldown - dt)
 	if shoot_length > 0 && player.cooldown <= 0 {
-		spawn_beam(beams, player.position, rl.Vector2{shoot_direction.x * BEAM_SPEED, shoot_direction.y * BEAM_SPEED})
+		spawn_beam(beams, player.position, rl.Vector2{shoot_direction.x * BEAM_SPEED, shoot_direction.y * BEAM_SPEED}, false)
+		for spread_index := 1; spread_index <= player.front_spread_levels; spread_index += 1 {
+			angle := f32(spread_index) * 0.20943951
+			for side := f32(-1); side <= 1; side += 2 {
+				rotated := rotate_direction(shoot_direction, angle * side)
+				spawn_beam(beams, player.position, rl.Vector2{rotated.x * BEAM_SPEED, rotated.y * BEAM_SPEED}, false)
+			}
+		}
+		if player.rear_laser_level > 0 {
+			rear_direction := rl.Vector2{-shoot_direction.x, -shoot_direction.y}
+			spawn_beam(beams, player.position, rl.Vector2{rear_direction.x * BEAM_SPEED, rear_direction.y * BEAM_SPEED}, true)
+			if player.rear_laser_level >= 2 {
+				left_direction := rl.Vector2{-shoot_direction.y, shoot_direction.x}
+				spawn_beam(beams, player.position, rl.Vector2{left_direction.x * BEAM_SPEED, left_direction.y * BEAM_SPEED}, false)
+			}
+			if player.rear_laser_level >= 3 {
+				right_direction := rl.Vector2{shoot_direction.y, -shoot_direction.x}
+				spawn_beam(beams, player.position, rl.Vector2{right_direction.x * BEAM_SPEED, right_direction.y * BEAM_SPEED}, false)
+			}
+			for spread_index := 4; spread_index <= player.rear_laser_level; spread_index += 1 {
+				angle := f32(spread_index - 3) * 0.20943951
+				for side := f32(-1); side <= 1; side += 2 {
+					rotated := rotate_direction(rear_direction, angle * side)
+					spawn_beam(beams, player.position, rl.Vector2{rotated.x * BEAM_SPEED, rotated.y * BEAM_SPEED}, false)
+				}
+			}
+		}
 		player.cooldown = 0.5
 	}
 }
 
-spawn_beam :: proc(beams: ^[MAX_BEAMS]Beam, position, velocity: rl.Vector2) {
+rotate_direction :: proc(direction: rl.Vector2, angle: f32) -> rl.Vector2 {
+	cosine := math.cos(angle)
+	sine := math.sin(angle)
+	return rl.Vector2{direction.x * cosine - direction.y * sine, direction.x * sine + direction.y * cosine}
+}
+
+apply_upgrade :: proc(player: ^Player, upgrade: Upgrade_Type) {
+	switch upgrade {
+	case .Restore_Health:
+		player.health = math.min(100, player.health + 50)
+	case .Front_Spread:
+		player.front_spread_levels += 1
+	case .Rear_Laser:
+		player.rear_laser_level += 1
+	case .Extra_Piercing:
+		player.extra_laser_hits += 1
+	case .Larger_Light:
+		player.light_radius += 20
+	}
+}
+
+spawn_beam :: proc(beams: ^[MAX_BEAMS]Beam, position, velocity: rl.Vector2, sweeping: bool) {
 	for &beam in beams {
 		if beam.life <= 0 {
-			beam = Beam{origin = position, position = position, velocity = velocity, life = 3}
+			beam = Beam{origin = position, position = position, velocity = velocity, life = 3, sweeping = sweeping, sweep_angle = -REAR_SWEEP_LIMIT, sweep_direction = 1}
+			if sweeping {
+				beam.velocity = rotate_direction(beam.velocity, -REAR_SWEEP_LIMIT)
+				beam.velocity.x *= 2.5
+				beam.velocity.y *= 2.5
+			}
 			break
 		}
 	}
@@ -79,41 +132,63 @@ update_beams :: proc(beams: ^[MAX_BEAMS]Beam, enemies: ^[MAX_ENEMIES]Enemy, play
 		if beam.life <= 0 { continue }
 
 		tip_start := beam.position
-		player_delta_x := player.position.x - beam.origin.x
-		player_delta_y := player.position.y - beam.origin.y
-		step_x := beam.velocity.x * dt + player_delta_x
-		step_y := beam.velocity.y * dt + player_delta_y
-		travel_fraction: f32 = 1
 		reached_edge := false
-
-		if step_x > 0 && tip_start.x + step_x >= SCREEN_W {
-			travel_fraction = math.min(travel_fraction, (f32(SCREEN_W) - tip_start.x) / step_x)
-			reached_edge = true
-		} else if step_x < 0 && tip_start.x + step_x <= 0 {
-			travel_fraction = math.min(travel_fraction, -tip_start.x / step_x)
-			reached_edge = true
+		if beam.sweeping {
+			previous_angle := beam.sweep_angle
+			beam.sweep_angle = math.min(REAR_SWEEP_LIMIT, beam.sweep_angle + REAR_SWEEP_SPEED * dt)
+			if beam.sweep_angle >= REAR_SWEEP_LIMIT {
+				beam.sweep_complete = true
+			}
+			angle_delta := beam.sweep_angle - previous_angle
+			beam.velocity = rotate_direction(beam.velocity, angle_delta)
+			velocity_length := math.sqrt(beam.velocity.x * beam.velocity.x + beam.velocity.y * beam.velocity.y)
+			beam.sweep_distance += velocity_length * dt
+			direction := rl.Vector2{beam.velocity.x / velocity_length, beam.velocity.y / velocity_length}
+			distance_to_edge: f32 = f32(SCREEN_W + SCREEN_H)
+			if direction.x > 0 {
+				distance_to_edge = math.min(distance_to_edge, (f32(SCREEN_W) - player.position.x) / direction.x)
+			} else if direction.x < 0 {
+				distance_to_edge = math.min(distance_to_edge, -player.position.x / direction.x)
+			}
+			if direction.y > 0 {
+				distance_to_edge = math.min(distance_to_edge, (f32(SCREEN_H) - player.position.y) / direction.y)
+			} else if direction.y < 0 {
+				distance_to_edge = math.min(distance_to_edge, -player.position.y / direction.y)
+			}
+			ray_distance := math.min(beam.sweep_distance, distance_to_edge)
+			beam.position = rl.Vector2{player.position.x + direction.x * ray_distance, player.position.y + direction.y * ray_distance}
+		} else {
+			step_x := beam.velocity.x * dt + player.position.x - beam.origin.x
+			step_y := beam.velocity.y * dt + player.position.y - beam.origin.y
+			travel_fraction: f32 = 1
+			if step_x > 0 && tip_start.x + step_x >= SCREEN_W {
+				travel_fraction = math.min(travel_fraction, (f32(SCREEN_W) - tip_start.x) / step_x)
+				reached_edge = true
+			} else if step_x < 0 && tip_start.x + step_x <= 0 {
+				travel_fraction = math.min(travel_fraction, -tip_start.x / step_x)
+				reached_edge = true
+			}
+			if step_y > 0 && tip_start.y + step_y >= SCREEN_H {
+				travel_fraction = math.min(travel_fraction, (f32(SCREEN_H) - tip_start.y) / step_y)
+				reached_edge = true
+			} else if step_y < 0 && tip_start.y + step_y <= 0 {
+				travel_fraction = math.min(travel_fraction, -tip_start.y / step_y)
+				reached_edge = true
+			}
+			step_x *= travel_fraction
+			step_y *= travel_fraction
+			beam.position.x += step_x
+			beam.position.y += step_y
 		}
-		if step_y > 0 && tip_start.y + step_y >= SCREEN_H {
-			travel_fraction = math.min(travel_fraction, (f32(SCREEN_H) - tip_start.y) / step_y)
-			reached_edge = true
-		} else if step_y < 0 && tip_start.y + step_y <= 0 {
-			travel_fraction = math.min(travel_fraction, -tip_start.y / step_y)
-			reached_edge = true
-		}
-
-		step_x *= travel_fraction
-		step_y *= travel_fraction
-		beam.position.x += step_x
-		beam.position.y += step_y
 		beam.origin = player.position
-		beam.life -= dt
+		if !beam.sweeping { beam.life -= dt }
 
 		segment_start := beam.origin
 		segment_x := beam.position.x - segment_start.x
 		segment_y := beam.position.y - segment_start.y
 		segment_length_sq := segment_x * segment_x + segment_y * segment_y
 		if segment_length_sq > 0 {
-			for beam.hits < 3 {
+			for beam.hits < 3 + player.extra_laser_hits {
 				closest_enemy: ^Enemy = nil
 				closest_projection: f32 = 2
 				for &enemy in enemies {
@@ -138,7 +213,7 @@ update_beams :: proc(beams: ^[MAX_BEAMS]Beam, enemies: ^[MAX_ENEMIES]Enemy, play
 			}
 		}
 
-		if reached_edge || beam.life <= 0 || beam.hits >= 3 {
+		if (!beam.sweeping && (reached_edge || beam.life <= 0)) || beam.sweep_complete || beam.hits >= 3 + player.extra_laser_hits {
 			beam.life = 0
 		}
 	}
@@ -168,6 +243,7 @@ spawn_enemy :: proc(enemies: ^[MAX_ENEMIES]Enemy, elapsed: f32, spawn_count: ^in
 		} else if enemy_type == .Triangle {
 			speed *= 1.9
 		}
+		speed *= 0.8
 		enemy = Enemy{position = rl.Vector2{x, y}, speed = speed, health = 1, radius = 12, kind = enemy_type}
 		spawn_count^ += 1
 		break
