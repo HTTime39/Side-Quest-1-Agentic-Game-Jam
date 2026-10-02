@@ -207,6 +207,14 @@ update_beams :: proc(beams: ^[MAX_BEAMS]Beam, enemies: ^[MAX_ENEMIES]Enemy, play
 					}
 				}
 				if closest_enemy == nil { break }
+				if closest_enemy^.kind == .Killer_Whale {
+					closest_enemy^.health -= 1
+					closest_enemy^.flash_timer = 0.16
+					beam.hits += 1
+					score^ += 10
+					beam.life = 0
+					break
+				}
 				closest_enemy^.health = 0
 				beam.hits += 1
 				score^ += 10
@@ -246,6 +254,24 @@ spawn_enemy :: proc(enemies: ^[MAX_ENEMIES]Enemy, elapsed: f32, spawn_count: ^in
 		speed *= 0.8
 		enemy = Enemy{position = rl.Vector2{x, y}, speed = speed, health = 1, radius = 12, kind = enemy_type}
 		spawn_count^ += 1
+		break
+	}
+}
+
+spawn_killer_whale :: proc(enemies: ^[MAX_ENEMIES]Enemy, elapsed: f32) {
+	for &enemy in enemies {
+		if enemy.health > 0 { continue }
+		spawn_side := rl.GetRandomValue(0, 3)
+		x: f32 = 0
+		y: f32 = 0
+		switch spawn_side {
+		case 0: x = ARENA_LEFT - 48; y = f32(rl.GetRandomValue(i32(ARENA_TOP), i32(ARENA_BOTTOM)))
+		case 1: x = ARENA_RIGHT + 48; y = f32(rl.GetRandomValue(i32(ARENA_TOP), i32(ARENA_BOTTOM)))
+		case 2: x = f32(rl.GetRandomValue(i32(ARENA_LEFT), i32(ARENA_RIGHT))); y = ARENA_TOP - 48
+		case 3: x = f32(rl.GetRandomValue(i32(ARENA_LEFT), i32(ARENA_RIGHT))); y = ARENA_BOTTOM + 48
+		}
+		speed := (54 + elapsed * 1.2 + f32(rl.GetRandomValue(0, 22))) * 0.8
+		enemy = Enemy{position = rl.Vector2{x, y}, speed = speed, health = 150, radius = 48, kind = .Killer_Whale, dash_cooldown = 2.5}
 		break
 	}
 }
@@ -294,6 +320,29 @@ update_enemies :: proc(enemies: ^[MAX_ENEMIES]Enemy, player: ^Player, score: ^in
 				diagonal_scale := enemy.speed * dt * 0.70710678
 				enemy.position.x += enemy.direction.x * diagonal_scale
 				enemy.position.y += enemy.direction.y * diagonal_scale
+			} else if enemy.kind == .Killer_Whale {
+				enemy.dash_cooldown = math.max(0, enemy.dash_cooldown - dt)
+				if enemy.dash_time > 0 {
+					enemy.direction = enemy.dash_direction
+					dash_step := math.min(dt, enemy.dash_time)
+					enemy.dash_time -= dash_step
+					enemy.position.x += enemy.dash_direction.x * enemy.speed * 3 * dash_step
+					enemy.position.y += enemy.dash_direction.y * enemy.speed * 3 * dash_step
+				} else {
+					enemy.direction = rl.Vector2{dx / length, dy / length}
+					if enemy.dash_cooldown <= 0 {
+						enemy.dash_direction = enemy.direction
+						enemy.dash_time = 0.5
+						enemy.dash_cooldown = 2.5
+						dash_step := math.min(dt, enemy.dash_time)
+						enemy.dash_time -= dash_step
+						enemy.position.x += enemy.dash_direction.x * enemy.speed * 3 * dash_step
+						enemy.position.y += enemy.dash_direction.y * enemy.speed * 3 * dash_step
+					} else {
+						enemy.position.x += enemy.direction.x * enemy.speed * dt
+						enemy.position.y += enemy.direction.y * enemy.speed * dt
+					}
+				}
 			} else {
 				enemy.position.x += dx / length * enemy.speed * dt
 				enemy.position.y += dy / length * enemy.speed * dt

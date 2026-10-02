@@ -41,6 +41,7 @@ Enemy_Type :: enum {
 	Red,
 	Blue,
 	Triangle,
+	Killer_Whale,
 }
 
 Enemy_Axis :: enum {
@@ -59,6 +60,9 @@ Enemy :: struct {
 	direction_lock: f32,
 	movement_axis: Enemy_Axis,
 	flash_timer: f32,
+	dash_cooldown: f32,
+	dash_time: f32,
+	dash_direction: rl.Vector2,
 }
 
 Beam :: struct {
@@ -148,7 +152,11 @@ main :: proc() {
 			spawn_timer -= dt
 			spawn_delay := math.max(0.18, 0.85 - time_alive * 0.008)
 			if stage_spawned < stage_enemy_target && spawn_timer <= 0 {
-				spawn_enemy(&enemies, time_alive, &spawn_count)
+				if stage == 6 {
+					spawn_killer_whale(&enemies, time_alive)
+				} else {
+					spawn_enemy(&enemies, time_alive, &spawn_count)
+				}
 				stage_spawned += 1
 				spawn_timer = spawn_delay
 			}
@@ -164,12 +172,16 @@ main :: proc() {
 					if enemy.health > 0 { active_enemies += 1 }
 				}
 				if stage_spawned == stage_enemy_target && active_enemies == 0 {
-					if stage == 5 {
+					if stage == 6 {
 						win = true
 					} else {
 						stage += 1
 						stage_spawned = 0
-						stage_enemy_target *= 2
+						if stage == 6 {
+							stage_enemy_target = 1
+						} else {
+							stage_enemy_target *= 2
+						}
 						spawn_timer = 0
 						choose_upgrade_options(&upgrade_choices)
 						upgrade_selection = 0

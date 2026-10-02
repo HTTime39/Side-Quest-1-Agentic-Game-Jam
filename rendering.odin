@@ -50,6 +50,22 @@ squid_point :: proc(center, right, forward: rl.Vector2, radius, local_x, local_y
 	}
 }
 
+whale_point :: proc(center, right, forward: rl.Vector2, radius, local_x, local_y: f32) -> rl.Vector2 {
+	return rl.Vector2{
+		center.x + (right.x * local_x + forward.x * local_y) * radius,
+		center.y + (right.y * local_x + forward.y * local_y) * radius,
+	}
+}
+
+draw_oriented_triangle :: proc(a, b, c: rl.Vector2, color: rl.Color) {
+	winding := (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+	if winding > 0 {
+		rl.DrawTriangle(a, c, b, color)
+	} else {
+		rl.DrawTriangle(a, b, c, color)
+	}
+}
+
 draw_game :: proc(player: Player, enemies: [MAX_ENEMIES]Enemy, beams: [MAX_BEAMS]Beam, elapsed: f32, score, stage, stage_enemy_target, stage_spawned: int, upgrade_pending: bool, upgrade_choices: [2]Upgrade_Type, upgrade_selection: int, title_screen, game_over, win: bool, background_texture: rl.Texture2D, lighting_target: rl.RenderTexture2D, lighting_shader: rl.Shader, player_light_location, player_light_radius_location, screen_size_location, beam_segments_location, beam_count_location: i32) {
 	rl.BeginTextureMode(lighting_target)
 	rl.ClearBackground(rl.Color{9, 13, 24, 255})
@@ -62,7 +78,77 @@ draw_game :: proc(player: Player, enemies: [MAX_ENEMIES]Enemy, beams: [MAX_BEAMS
 
 	for enemy in enemies {
 		if enemy.health <= 0 { continue }
-		if enemy.kind == .Blue {
+		if enemy.kind == .Killer_Whale {
+			position := enemy.position
+			direction := enemy.direction
+			direction_length := math.sqrt(direction.x * direction.x + direction.y * direction.y)
+			if direction_length > 0 {
+				direction.x /= direction_length
+				direction.y /= direction_length
+			} else {
+				direction = rl.Vector2{0, -1}
+			}
+			right := rl.Vector2{-direction.y, direction.x}
+			radius := enemy.radius
+			telegraph_blink := enemy.dash_time <= 0 && enemy.dash_cooldown <= 0.5 && math.sin(elapsed * 24) > 0
+			shark_green := rl.Color{57, 255, 20, 255}
+			body_color := rl.Color{232, 192, 128, 255}
+			fin_color := rl.Color{154, 116, 69, 255}
+			spot_color := rl.Color{126, 91, 51, 255}
+			outline_color := rl.Color{0, 0, 0, 255}
+			if enemy.flash_timer > 0 { body_color = rl.Color{235, 245, 240, 255} }
+			if telegraph_blink {
+				body_color = shark_green
+				fin_color = shark_green
+				spot_color = shark_green
+			}
+			body_front_left := whale_point(position, right, direction, radius, -0.72, 0.84)
+			body_front_right := whale_point(position, right, direction, radius, 0.72, 0.84)
+			body_rear_tip := whale_point(position, right, direction, radius, 0, -1.05)
+			tail_root_left := whale_point(position, right, direction, radius, -0.23, -0.78)
+			tail_root_right := whale_point(position, right, direction, radius, 0.23, -0.78)
+			tail_tip := whale_point(position, right, direction, radius, 0, -2.18)
+			draw_oriented_triangle(tail_root_left, tail_root_right, tail_tip, fin_color)
+			under_fin_root_left := whale_point(position, right, direction, radius, -0.18, -0.12)
+			under_fin_root_right := whale_point(position, right, direction, radius, 0.18, -0.12)
+			under_fin_tip := whale_point(position, right, direction, radius, 0, -1.28)
+			draw_oriented_triangle(under_fin_root_left, under_fin_root_right, under_fin_tip, fin_color)
+			left_fin_root := whale_point(position, right, direction, radius, -0.3, 0.06)
+			left_fin_tip := whale_point(position, right, direction, radius, -1.34, -0.48)
+			left_fin_back := whale_point(position, right, direction, radius, -0.48, -0.7)
+			right_fin_root := whale_point(position, right, direction, radius, 0.3, 0.06)
+			right_fin_tip := whale_point(position, right, direction, radius, 1.34, -0.48)
+			right_fin_back := whale_point(position, right, direction, radius, 0.48, -0.7)
+			draw_oriented_triangle(left_fin_root, left_fin_back, left_fin_tip, fin_color)
+			draw_oriented_triangle(right_fin_root, right_fin_tip, right_fin_back, fin_color)
+			draw_oriented_triangle(body_front_left, body_front_right, body_rear_tip, body_color)
+			rl.DrawLineEx(body_front_left, body_front_right, 5, outline_color)
+			rl.DrawLineEx(body_front_right, body_rear_tip, 5, outline_color)
+			rl.DrawLineEx(body_rear_tip, body_front_left, 5, outline_color)
+			rl.DrawLineEx(left_fin_root, left_fin_tip, 5, outline_color)
+			rl.DrawLineEx(left_fin_tip, left_fin_back, 5, outline_color)
+			rl.DrawLineEx(right_fin_root, right_fin_tip, 5, outline_color)
+			rl.DrawLineEx(right_fin_tip, right_fin_back, 5, outline_color)
+			rl.DrawLineEx(under_fin_root_left, under_fin_tip, 5, outline_color)
+			rl.DrawLineEx(under_fin_tip, under_fin_root_right, 5, outline_color)
+			rl.DrawLineEx(tail_root_left, tail_tip, 5, outline_color)
+			rl.DrawLineEx(tail_tip, tail_root_right, 5, outline_color)
+			for row := 0; row < 5; row += 1 {
+				local_y := -0.58 + f32(row) * 0.25
+				half_width := (local_y + 1.05) * 0.35
+				for column := -2; column <= 2; column += 1 {
+					local_x := f32(column) * half_width * 0.42
+					spot_position := whale_point(position, right, direction, radius, local_x, local_y)
+					rl.DrawCircleV(spot_position, 2, spot_color)
+				}
+			}
+			eye_color := rl.Color{36, 28, 19, 255}
+			if telegraph_blink { eye_color = shark_green }
+			for side := f32(-1); side <= 1; side += 2 {
+				eye_position := whale_point(position, right, direction, radius, side * 0.58, 0.68)
+				rl.DrawCircleV(eye_position, 2.5, eye_color)
+			}
+		} else if enemy.kind == .Blue {
 			p := enemy.position
 			r := enemy.radius
 			forward := enemy.direction
@@ -237,11 +323,22 @@ draw_game :: proc(player: Player, enemies: [MAX_ENEMIES]Enemy, beams: [MAX_BEAMS
 	for enemy in enemies {
 		if enemy.health > 0 { remaining_enemies += 1 }
 	}
-	text := fmt.tprintf("EDGE//BREAK     SCORE %05d     ELAPSED %05.1f", score, elapsed)
+	text := fmt.tprintf("THE DEEP     SCORE %05d     ELAPSED %05.1f", score, elapsed)
 	score_text, _ := strings.clone_to_cstring(text)
 	rl.DrawText(score_text, 32, 26, 24, rl.Color{220, 235, 238, 255})
-	stage_text, _ := strings.clone_to_cstring(fmt.tprintf("STAGE %d/5     HOSTILES %03d", stage, remaining_enemies))
+	stage_label := fmt.tprintf("STAGE %d/5     HOSTILES %03d", stage, remaining_enemies)
+	if stage == 6 { stage_label = fmt.tprintf("FINAL BOSS     HOSTILES %03d", remaining_enemies) }
+	stage_text, _ := strings.clone_to_cstring(stage_label)
 	rl.DrawText(stage_text, 32, 51, 18, rl.Color{255, 219, 102, 255})
+	if stage == 6 {
+		boss_health: f32 = 0
+		for enemy in enemies {
+			if enemy.kind == .Killer_Whale && enemy.health > 0 { boss_health = enemy.health }
+		}
+		rl.DrawText("KILLER WHALE", 370, 26, 18, rl.Color{220, 235, 238, 255})
+		rl.DrawRectangle(500, 29, 210, 16, rl.Color{35, 42, 54, 255})
+		rl.DrawRectangle(500, 29, i32(math.max(0, boss_health) * 1.4), 16, rl.Color{238, 77, 91, 255})
+	}
 	rl.DrawRectangle(820, 29, 220, 16, rl.Color{35, 42, 54, 255})
 	rl.DrawRectangle(820, 29, i32(math.max(0, player.health) * 2.2), 16, rl.Color{72, 211, 176, 255})
 	hp_text, _ := strings.clone_to_cstring(fmt.tprintf("HP %03d", i32(math.max(0, player.health))))
@@ -251,7 +348,7 @@ draw_game :: proc(player: Player, enemies: [MAX_ENEMIES]Enemy, beams: [MAX_BEAMS
 	if game_over || win {
 		rl.DrawRectangle(0, 0, SCREEN_W, SCREEN_H, rl.Color{4, 7, 15, 190})
 		if win {
-			rl.DrawText("ALL FIVE STAGES CLEARED.", SCREEN_W / 2 - rl.MeasureText("ALL FIVE STAGES CLEARED.", 32) / 2, 270, 32, rl.Color{72, 211, 176, 255})
+			rl.DrawText("WHALE SHARK DEFEATED.", SCREEN_W / 2 - rl.MeasureText("WHALE SHARK DEFEATED.", 32) / 2, 270, 32, rl.Color{72, 211, 176, 255})
 		} else {
 			rl.DrawText("SIGNAL LOST", 415, 270, 42, rl.Color{238, 77, 91, 255})
 		}
@@ -283,8 +380,8 @@ draw_game :: proc(player: Player, enemies: [MAX_ENEMIES]Enemy, beams: [MAX_BEAMS
 	}
 	if title_screen {
 		rl.DrawRectangle(0, 0, SCREEN_W, SCREEN_H, rl.Color{4, 7, 15, 240})
-		rl.DrawText("EDGE//BREAK", 335, 180, 64, rl.Color{72, 211, 176, 255})
-		rl.DrawText("SURVIVE THE SIGNAL", 396, 270, 24, rl.Color{150, 180, 190, 255})
+		rl.DrawText("The Deep", SCREEN_W / 2 - rl.MeasureText("The Deep", 64) / 2, 180, 64, rl.Color{72, 211, 176, 255})
+		rl.DrawText("SURVIVE THE IN THE DARK", 396, 270, 24, rl.Color{150, 180, 190, 255})
 		rl.DrawText("MOVE   WASD / ARROWS", SCREEN_W / 2 - rl.MeasureText("MOVE   WASD / ARROWS", 32) / 2, 365, 32, rl.Color{220, 235, 238, 255})
 		rl.DrawText("FIRE   I / J / K / L", SCREEN_W / 2 - rl.MeasureText("FIRE   I / J / K / L", 32) / 2, 420, 32, rl.Color{220, 235, 238, 255})
 		rl.DrawText("DASH   SPACE", SCREEN_W / 2 - rl.MeasureText("DASH   SPACE", 32) / 2, 475, 32, rl.Color{220, 235, 238, 255})
