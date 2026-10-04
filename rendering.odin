@@ -350,7 +350,7 @@ draw_game :: proc(player: Player, enemies: [MAX_ENEMIES]Enemy, beams: [MAX_BEAMS
 		if win {
 			rl.DrawText("WHALE SHARK DEFEATED.", SCREEN_W / 2 - rl.MeasureText("WHALE SHARK DEFEATED.", 32) / 2, 270, 32, rl.Color{72, 211, 176, 255})
 		} else {
-			rl.DrawText("SIGNAL LOST", 415, 270, 42, rl.Color{238, 77, 91, 255})
+			rl.DrawText("Light Lost", 455, 270, 42, rl.Color{238, 77, 91, 255})
 		}
 		final_score_text, _ := strings.clone_to_cstring(fmt.tprintf("FINAL SCORE  %05d", score))
 		rl.DrawText(final_score_text, 430, 335, 25, rl.Color{230, 235, 235, 255})

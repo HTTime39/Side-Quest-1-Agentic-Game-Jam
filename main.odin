@@ -79,7 +79,7 @@ Beam :: struct {
 }
 
 main :: proc() {
-	rl.InitWindow(SCREEN_W, SCREEN_H, "EDGE//BREAK - Survival Protocol")
+	rl.InitWindow(SCREEN_W, SCREEN_H, "The Deep")
 	rl.SetTargetFPS(60)
 	defer rl.CloseWindow()
 	background_texture := rl.LoadTexture("assets/background.png")
